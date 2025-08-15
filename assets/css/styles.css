@@ -1,0 +1,102 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;900&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+body { background: #121212; color: #fff; }
+button { border: none; background: transparent; }
+
+.wrapper {
+  min-height: 100dvh;
+  width: 100%;
+  background-color: #221f2f;
+  color: #fff;
+  padding: 1.5rem;
+  position: relative;
+}
+
+.wrapper::before{
+  z-index: 1;
+  content: "Notes.";
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  user-select: none;
+  pointer-events: none;
+  transform: translate(-50%,-50%);
+  font-size: clamp(4rem, 25vw, 10rem);
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.088);
+}
+
+.createBtn {
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 2px solid #dddddd3b;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+  padding: 1rem 1.5rem;
+  font-size: clamp(0.8rem, 3vw, 1.2rem);
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: .6rem;
+  transition: .2s ease;
+  outline: none;
+}
+
+.createBtn:hover { background: #fff; color: #111; }
+
+/* ---------- GRID (1 / 2 / 3 / 4) ---------- */
+.notes__container {
+  display: grid;
+  gap: 1.5rem;
+  padding-block: 2rem;
+  grid-template-columns: repeat(1, minmax(0, 1fr)); /* mobile */
+}
+
+@media (min-width: 600px) {
+  .notes__container { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 900px) {
+  .notes__container { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (min-width: 1200px) {
+  .notes__container { grid-template-columns: repeat(4, minmax(0, 1fr)); } /* ← 4 on desktop */
+}
+
+/* Note card */
+.note{
+  min-height: 190px;
+  width: 100%;
+  padding: 1rem 1.6rem;
+  position: relative;
+  border-radius: 8px;
+  background-color: rgba(0, 0, 0, 0.44);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(7.4px);
+  -webkit-backdrop-filter: blur(7.4px);
+  border: 2px solid rgba(255,255,255, 0.1);
+}
+
+.input__box {
+  outline: none;
+  min-height: 150px;
+  width: 100%;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+#deleteNote{
+  position: absolute;
+  right: -20px;
+  top: -15px;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+  z-index: 2;
+  background-color: #222;
+  color: #fff;
+  transition: 0.2s ease;
+}
+#deleteNote:hover{ background: #fff; color: #111; }
