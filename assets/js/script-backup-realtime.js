@@ -132,7 +132,7 @@ onSnapshot(
 
 /* ---------- Debounced save ---------- */
 const saveTimers = new Map();
-const debouncedSave = (noteId, text, delay = 3000) => {
+const debouncedSave = (noteId, text, delay = 600) => {
   if (saveTimers.has(noteId)) clearTimeout(saveTimers.get(noteId));
   const t = setTimeout(() => {
     updateNoteInFirebase(noteId, text);
