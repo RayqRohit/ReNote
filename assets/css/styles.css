@@ -119,6 +119,8 @@ button {
   /* min-height: 70vh; */
 }
 
+
+
 .note {
   min-height: 195px;
   width: 100%;
@@ -196,9 +198,9 @@ button {
 /* Notes loader */
 .notes-loader {
   position: absolute;
-  top: 20%;
+  top: 95%;             /* <-- instead of 50% */
   left: 50%;
-  transform: translate(-50%, -50%);
+  transform: translateX(-50%);  
   display: flex;
   flex-direction: column;
   align-items: center;
