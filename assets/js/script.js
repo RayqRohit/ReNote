@@ -12,12 +12,12 @@ import {
 
 /* ---------- Firebase config ---------- */
 const firebaseConfig = {
-    apiKey: "AIzaSyBDU8xlK7LHmkR3de8d7DseFO2Zu9SHHYE",
-    authDomain: "re-notes-e593f.firebaseapp.com",
-    projectId: "re-notes-e593f",
-    storageBucket: "re-notes-e593f.firebasestorage.app",
-    messagingSenderId: "332994702447",
-    appId: "1:332994702447:web:1b154759c684207399b19a"
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 /* ---------- Init ---------- */
