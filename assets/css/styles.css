@@ -116,7 +116,7 @@ button {
   padding-block: 2rem;
   grid-template-columns: repeat(1, minmax(0, 1fr));
   position: relative;
-  min-height: 70vh;
+  /* min-height: 70vh; */
 }
 
 .note {
