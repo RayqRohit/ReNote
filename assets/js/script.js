@@ -91,7 +91,7 @@ const startListener = (uid) => {
     const loadingSection = document.querySelector('.loading-section');
     const controlsSection = document.querySelector('.controls-section');
 
-    console.log('Starting listener - hiding main loader, showing notes loader');
+    // console.log('Starting listener - hiding main loader, showing notes loader');
 
     // Step 1: Hide main loader and show controls
     if (loadingSection) loadingSection.style.display = 'none';
@@ -113,7 +113,7 @@ const startListener = (uid) => {
 
     let firstRun = true;
     unsubscribe = onSnapshot(qNotes, (snap) => {
-        console.log('Firestore snapshot received, notes count:', snap.size);
+        // console.log('Firestore snapshot received, notes count:', snap.size);
 
         // Step 3: Clear loader and show notes
         if (firstRun) {
@@ -145,7 +145,7 @@ const startListener = (uid) => {
 };
 
 /* ---------- Debounced save ---------- */
-const debouncedSave = (id, text, delay = 2000) => {
+const debouncedSave = (id, text, delay = 800) => {
     if (saveTimers.has(id)) clearTimeout(saveTimers.get(id));
     const t = setTimeout(() => {
         updateNoteInFirebase(id, text);
@@ -153,6 +153,30 @@ const debouncedSave = (id, text, delay = 2000) => {
     }, delay);
     saveTimers.set(id, t);
 };
+// 1. Save on page unload
+window.addEventListener('beforeunload', () => {
+    saveTimers.forEach((timer, noteId) => {
+        clearTimeout(timer);
+        const noteElement = document.querySelector(`.note[data-id="${noteId}"] .input__box`);
+        if (noteElement) {
+            updateNoteInFirebase(noteId, noteElement.innerHTML);
+        }
+    });
+    saveTimers.clear();
+});
+// 2. Save when page loses focus
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        saveTimers.forEach((timer, noteId) => {
+            clearTimeout(timer);
+            const noteElement = document.querySelector(`.note[data-id="${noteId}"] .input__box`);
+            if (noteElement) {
+                updateNoteInFirebase(noteId, noteElement.innerHTML);
+            }
+        });
+        saveTimers.clear();
+    }
+});
 
 /* ---------- UI events ---------- */
 const addNote = async () => {
@@ -278,6 +302,7 @@ document.addEventListener('paste', async (e) => {
     }
 
     // If no image, handle as plain text
+    // Replace your text paste handling section with this:
     if (!hasImage) {
         e.preventDefault();
         const text = e.clipboardData.getData('text/plain');
@@ -294,6 +319,10 @@ document.addEventListener('paste', async (e) => {
             selection.removeAllRanges();
             selection.addRange(range);
         }
+
+        // ** ADD THIS: Manually trigger save after paste **
+        const noteId = activeElement.closest('.note').dataset.id;
+        debouncedSave(noteId, activeElement.innerHTML);
     }
 });
 
