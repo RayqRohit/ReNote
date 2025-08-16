@@ -1,28 +1,61 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- icons -->
-  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet" />
+    <!-- Remix-icon -->
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.5.0/fonts/remixicon.css" rel="stylesheet" />
 
-  <!-- css -->
-  <link rel="stylesheet" href="./assets/css/styles.css" />
-  <link rel="stylesheet" href="./assets/css/media.css" />
+    <link rel="shortcut icon" href="./assets/images/Notes-Logo.svg" type="image/x-icon">
 
-  <title>Notes.</title>
+    <!-- Styles -->
+    <link rel="stylesheet" href="./assets/css/styles.css" />
+    <link rel="stylesheet" href="./assets/css/media.css" />
+
+    <title>Quick Notes.</title>
 </head>
+
 <body>
-  <div class="wrapper">
-    <button class="createBtn">
-      Create Note <i class="ri-pencil-line"></i>
-    </button>
+    <div class="wrapper">
 
-    <div class="notes__container"></div>
-  </div>
+        <!-- Loading state (visible initially) -->
+        <div class="loading-section">
+            <div class="loader">
+                <i class="ri-loader-4-line"></i>
+                <p>Initializing...</p>
+            </div>
+        </div>
 
-  <!-- Firebase Script -->
-  <script type="module" src="./assets/js/script.js"></script>
+        <!-- Auth section (hidden initially) -->
+        <div class="auth-section" style="display: none;">
+            <button id="signinBtn" class="createBtn signin-btn">
+                <img src="./assets/images/google-png.png" alt="Google"> Sign in with Google
+            </button>
+        </div>
+
+        <!-- Logged-in controls (hidden initially) -->
+        <div class="controls-section" style="display: none;">
+            <button id="createNoteBtn" class="createBtn">
+                Create Note <i class="ri-pencil-fill"></i>
+            </button>
+            <button id="signoutBtn" class="createBtn signout-btn">
+                <i class="ri-logout-box-line"></i>
+            </button>
+        </div>
+
+        <!-- Notes container -->
+        <div class="notes__container">
+            <div class="notes-loader" style="display:none;">
+                <i class="ri-loader-4-line"></i>
+                <p>Summoning your notes...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase logic -->
+    <script type="module" src="./assets/js/script.js"></script>
 </body>
+
 </html>

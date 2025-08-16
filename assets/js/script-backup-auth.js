@@ -51,7 +51,7 @@ const makeCard = ({ id, text }) => {
     p.className = "input__box";
     p.contentEditable = "true";
     p.spellcheck = "false";
-    p.innerHTML = text || ""; // Changed from textContent to innerHTML
+    p.textContent = text || "";
 
     card.append(del, p);
     return card;
@@ -88,49 +88,20 @@ const deleteNoteFromFirebase = (id) =>
 const startListener = (uid) => {
     if (unsubscribe) unsubscribe();
 
-    const loadingSection = document.querySelector('.loading-section');
-    const controlsSection = document.querySelector('.controls-section');
-
-    console.log('Starting listener - hiding main loader, showing notes loader');
-
-    // Step 1: Hide main loader and show controls
-    if (loadingSection) loadingSection.style.display = 'none';
-    if (controlsSection) controlsSection.style.display = 'flex';
-
-    // Step 2: Clear container and show notes loader
-    notesContainer.innerHTML = `
-        <div class="notes-loader">
-            <i class="ri-loader-4-line"></i>
-            <p>Summoning your notes...</p>
-        </div>
-    `;
-
     const qNotes = query(
         collection(db, "notes"),
         where("userId", "==", uid),
         orderBy("order", "desc")
     );
 
-    let firstRun = true;
     unsubscribe = onSnapshot(qNotes, (snap) => {
-        console.log('Firestore snapshot received, notes count:', snap.size);
-
-        // Step 3: Clear loader and show notes
-        if (firstRun) {
-            notesContainer.innerHTML = ''; // Clear the loader
-            firstRun = false;
-        } else {
-            notesContainer.innerHTML = ''; // Clear existing notes
-        }
-
-        // Step 4: Add all notes
+        notesContainer.innerHTML = "";
         snap.forEach(d => {
             notesContainer.appendChild(
                 makeCard({ id: d.id, text: d.data().text || "" })
             );
         });
 
-        // Focus logic
         if (pendingFocusId) {
             const box = notesContainer.querySelector(
                 `.note[data-id="${pendingFocusId}"] .input__box`
@@ -138,10 +109,7 @@ const startListener = (uid) => {
             if (box) focusInputBox(box);
             pendingFocusId = null;
         }
-    }, (err) => {
-        console.error("onSnapshot error:", err);
-        notesContainer.innerHTML = '<p class="error-message">Error loading notes</p>';
-    });
+    }, (err) => console.error("onSnapshot error:", err));
 };
 
 /* ---------- Debounced save ---------- */
@@ -177,19 +145,19 @@ notesContainer.addEventListener("input", (e) => {
     if (!e.target.classList.contains("input__box")) return;
     debouncedSave(
         e.target.closest(".note").dataset.id,
-        e.target.innerHTML
+        e.target.innerText.replace(/\r\n/g, "\n")
     );
 });
 
 notesContainer.addEventListener("blur", (e) => {
     if (!e.target.classList.contains("input__box")) return;
     const id = e.target.closest(".note").dataset.id;
-    const content = e.target.innerHTML; // Changed from innerText to innerHTML
+    const text = e.target.innerText.replace(/\r\n/g, "\n");
     if (saveTimers.has(id)) {
         clearTimeout(saveTimers.get(id));
         saveTimers.delete(id);
     }
-    updateNoteInFirebase(id, content);
+    updateNoteInFirebase(id, text);
 }, true);
 
 /* ---------- Shortcuts ---------- */
@@ -218,147 +186,27 @@ signInBtn.addEventListener("click", async () => {
 signOutBtn.addEventListener("click", () => signOut(auth));
 
 /* ---------- Auth state ---------- */
-/* ---------- Auth state (FIXED FOR NO FLASH) ---------- */
-/* ---------- Auth state (FIXED - Show Loaders Properly) ---------- */
 onAuthStateChanged(auth, (user) => {
     if (unsubscribe) {
         unsubscribe();
         unsubscribe = null;
     }
 
-    const loadingSection = document.querySelector('.loading-section');
-    const authSection = document.querySelector('.auth-section');
-    const controlsSection = document.querySelector('.controls-section');
-
     if (user) {
-        // User is authenticated
-        authSection.style.display = "none";
-        controlsSection.style.display = "none"; // Keep hidden until notes load
-        // DON'T hide loadingSection here - let startListener handle it
+        // Hide sign-in, show sign-out and create button
+        signInBtn.style.display = "none";
+        signOutBtn.style.display = "inline-flex";
+        createBtn.style.display = "inline-flex";
 
         // Start listening to user's notes
         startListener(user.uid);
     } else {
-        // User is not authenticated - show sign-in
-        loadingSection.style.display = "none";
-        authSection.style.display = "block";
-        controlsSection.style.display = "none";
+        // Show sign-in, hide sign-out and create button
+        signInBtn.style.display = "inline-flex";
+        signOutBtn.style.display = "none";
+        createBtn.style.display = "none";
+
+        // Clear notes container
         notesContainer.innerHTML = "";
     }
 });
-
-
-
-// pasting screenshots
-
-/* ---------- Clipboard/Screenshot Paste Feature ---------- */
-/* ---------- Image Paste Handler ---------- */
-/* ---------- Smart Paste Handler (Text + Images) ---------- */
-document.addEventListener('paste', async (e) => {
-    const activeElement = document.activeElement;
-    if (!activeElement || !activeElement.classList.contains('input__box')) return;
-
-    const items = e.clipboardData.items;
-    let hasImage = false;
-
-    // Check if there's an image in clipboard
-    for (let item of items) {
-        if (item.type.indexOf('image') !== -1) {
-            hasImage = true;
-            e.preventDefault();
-
-            const file = item.getAsFile();
-            const imageUrl = await handleImagePaste(file);
-
-            if (imageUrl) {
-                insertImageIntoNote(activeElement, imageUrl);
-            }
-            break;
-        }
-    }
-
-    // If no image, handle as plain text
-    if (!hasImage) {
-        e.preventDefault();
-        const text = e.clipboardData.getData('text/plain');
-
-        // Insert plain text at cursor
-        const selection = window.getSelection();
-        if (selection.rangeCount > 0) {
-            const range = selection.getRangeAt(0);
-            range.deleteContents();
-            const textNode = document.createTextNode(text);
-            range.insertNode(textNode);
-            range.setStartAfter(textNode);
-            range.setEndAfter(textNode);
-            selection.removeAllRanges();
-            selection.addRange(range);
-        }
-    }
-});
-
-// Keep your existing image handling functions
-const handleImagePaste = async (file) => {
-    try {
-        return new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onload = (e) => resolve(e.target.result);
-            reader.readAsDataURL(file);
-        });
-    } catch (error) {
-        console.error('Error handling image:', error);
-        return null;
-    }
-};
-
-const insertImageIntoNote = (noteElement, imageUrl) => {
-    // figure container that matches your CSS
-    const box = document.createElement('figure');
-    box.className = 'note-media is-loading';
-
-    // image
-    const img = document.createElement('img');
-    img.src = imageUrl;
-    img.alt = '';
-    img.decoding = 'async';
-    img.loading = 'lazy';
-    img.setAttribute('contenteditable', 'false');
-    img.draggable = false;
-
-    // shimmer off when image is ready
-    img.addEventListener('load', () => {
-        box.classList.remove('is-loading');
-    });
-
-    box.appendChild(img);
-
-    // helper: place caret after a given node
-    const moveCaretAfter = (node) => {
-        const range = document.createRange();
-        const sel = window.getSelection();
-        range.setStartAfter(node);
-        range.collapse(true);
-        sel.removeAllRanges();
-        sel.addRange(range);
-    };
-
-    // insert at current caret (or at end), then add a line break so typing continues on next line
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount) {
-        const r = sel.getRangeAt(0);
-        r.deleteContents();
-        r.insertNode(box);
-    } else {
-        noteElement.appendChild(box);
-    }
-    const br = document.createElement('br');
-    box.after(br);
-    moveCaretAfter(br);
-
-    // save right away
-    const noteId = noteElement.closest('.note').dataset.id;
-    updateNoteInFirebase(noteId, noteElement.innerHTML);
-
-    // keep focus in the note
-    noteElement.focus();
-};

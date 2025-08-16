@@ -51,7 +51,7 @@ const makeCard = ({ id, text }) => {
     p.className = "input__box";
     p.contentEditable = "true";
     p.spellcheck = "false";
-    p.innerHTML = text || ""; // Changed from textContent to innerHTML
+    p.textContent = text || "";
 
     card.append(del, p);
     return card;
@@ -88,22 +88,10 @@ const deleteNoteFromFirebase = (id) =>
 const startListener = (uid) => {
     if (unsubscribe) unsubscribe();
 
-    const loadingSection = document.querySelector('.loading-section');
-    const controlsSection = document.querySelector('.controls-section');
-
-    console.log('Starting listener - hiding main loader, showing notes loader');
-
-    // Step 1: Hide main loader and show controls
-    if (loadingSection) loadingSection.style.display = 'none';
-    if (controlsSection) controlsSection.style.display = 'flex';
-
-    // Step 2: Clear container and show notes loader
-    notesContainer.innerHTML = `
-        <div class="notes-loader">
-            <i class="ri-loader-4-line"></i>
-            <p>Summoning your notes...</p>
-        </div>
-    `;
+    const notesLoader = document.querySelector('.notes-loader');
+    // Show notes loader (centered)
+    if (notesLoader) notesLoader.style.display = 'flex';
+    if (notesContainer) notesContainer.classList.add('loading');
 
     const qNotes = query(
         collection(db, "notes"),
@@ -113,24 +101,23 @@ const startListener = (uid) => {
 
     let firstRun = true;
     unsubscribe = onSnapshot(qNotes, (snap) => {
-        console.log('Firestore snapshot received, notes count:', snap.size);
-
-        // Step 3: Clear loader and show notes
+        // On first snapshot: hide loader, show notes and controls
         if (firstRun) {
-            notesContainer.innerHTML = ''; // Clear the loader
+            if (notesLoader) notesLoader.style.display = 'none';
+            if (notesContainer) notesContainer.classList.remove('loading');
+            document.querySelector('.loading-section').style.display = "none";
+            document.querySelector('.controls-section').style.display = "flex";
             firstRun = false;
-        } else {
-            notesContainer.innerHTML = ''; // Clear existing notes
         }
-
-        // Step 4: Add all notes
+        // Render notes
+        notesContainer.innerHTML = '';
         snap.forEach(d => {
             notesContainer.appendChild(
                 makeCard({ id: d.id, text: d.data().text || "" })
             );
         });
 
-        // Focus logic
+        // Restore focus logic
         if (pendingFocusId) {
             const box = notesContainer.querySelector(
                 `.note[data-id="${pendingFocusId}"] .input__box`
@@ -138,10 +125,7 @@ const startListener = (uid) => {
             if (box) focusInputBox(box);
             pendingFocusId = null;
         }
-    }, (err) => {
-        console.error("onSnapshot error:", err);
-        notesContainer.innerHTML = '<p class="error-message">Error loading notes</p>';
-    });
+    }, (err) => console.error("onSnapshot error:", err));
 };
 
 /* ---------- Debounced save ---------- */
@@ -177,19 +161,19 @@ notesContainer.addEventListener("input", (e) => {
     if (!e.target.classList.contains("input__box")) return;
     debouncedSave(
         e.target.closest(".note").dataset.id,
-        e.target.innerHTML
+        e.target.innerText.replace(/\r\n/g, "\n")
     );
 });
 
 notesContainer.addEventListener("blur", (e) => {
     if (!e.target.classList.contains("input__box")) return;
     const id = e.target.closest(".note").dataset.id;
-    const content = e.target.innerHTML; // Changed from innerText to innerHTML
+    const text = e.target.innerText.replace(/\r\n/g, "\n");
     if (saveTimers.has(id)) {
         clearTimeout(saveTimers.get(id));
         saveTimers.delete(id);
     }
-    updateNoteInFirebase(id, content);
+    updateNoteInFirebase(id, text);
 }, true);
 
 /* ---------- Shortcuts ---------- */
@@ -219,7 +203,6 @@ signOutBtn.addEventListener("click", () => signOut(auth));
 
 /* ---------- Auth state ---------- */
 /* ---------- Auth state (FIXED FOR NO FLASH) ---------- */
-/* ---------- Auth state (FIXED - Show Loaders Properly) ---------- */
 onAuthStateChanged(auth, (user) => {
     if (unsubscribe) {
         unsubscribe();
@@ -230,19 +213,22 @@ onAuthStateChanged(auth, (user) => {
     const authSection = document.querySelector('.auth-section');
     const controlsSection = document.querySelector('.controls-section');
 
+    // Hide loading spinner
+    loadingSection.style.display = "none";
+
     if (user) {
-        // User is authenticated
+        // User is authenticated - show notes interface
         authSection.style.display = "none";
-        controlsSection.style.display = "none"; // Keep hidden until notes load
-        // DON'T hide loadingSection here - let startListener handle it
+        controlsSection.style.display = "flex";
 
         // Start listening to user's notes
         startListener(user.uid);
     } else {
         // User is not authenticated - show sign-in
-        loadingSection.style.display = "none";
         authSection.style.display = "block";
         controlsSection.style.display = "none";
+
+        // Clear notes container
         notesContainer.innerHTML = "";
     }
 });
@@ -252,54 +238,34 @@ onAuthStateChanged(auth, (user) => {
 // pasting screenshots
 
 /* ---------- Clipboard/Screenshot Paste Feature ---------- */
-/* ---------- Image Paste Handler ---------- */
-/* ---------- Smart Paste Handler (Text + Images) ---------- */
 document.addEventListener('paste', async (e) => {
+    // Only handle paste when user is in a note
     const activeElement = document.activeElement;
     if (!activeElement || !activeElement.classList.contains('input__box')) return;
 
     const items = e.clipboardData.items;
-    let hasImage = false;
-
-    // Check if there's an image in clipboard
+    
     for (let item of items) {
+        // Check if the item is an image
         if (item.type.indexOf('image') !== -1) {
-            hasImage = true;
-            e.preventDefault();
-
+            e.preventDefault(); // Prevent default paste behavior
+            
             const file = item.getAsFile();
             const imageUrl = await handleImagePaste(file);
-
+            
             if (imageUrl) {
+                // Insert image into the current note
                 insertImageIntoNote(activeElement, imageUrl);
             }
             break;
         }
     }
-
-    // If no image, handle as plain text
-    if (!hasImage) {
-        e.preventDefault();
-        const text = e.clipboardData.getData('text/plain');
-
-        // Insert plain text at cursor
-        const selection = window.getSelection();
-        if (selection.rangeCount > 0) {
-            const range = selection.getRangeAt(0);
-            range.deleteContents();
-            const textNode = document.createTextNode(text);
-            range.insertNode(textNode);
-            range.setStartAfter(textNode);
-            range.setEndAfter(textNode);
-            selection.removeAllRanges();
-            selection.addRange(range);
-        }
-    }
 });
 
-// Keep your existing image handling functions
+/* ---------- Image Handling Functions ---------- */
 const handleImagePaste = async (file) => {
     try {
+        // Convert image to base64 data URL
         return new Promise((resolve) => {
             const reader = new FileReader();
             reader.onload = (e) => resolve(e.target.result);
@@ -312,53 +278,57 @@ const handleImagePaste = async (file) => {
 };
 
 const insertImageIntoNote = (noteElement, imageUrl) => {
-    // figure container that matches your CSS
-    const box = document.createElement('figure');
-    box.className = 'note-media is-loading';
-
-    // image
+    // Create image element
     const img = document.createElement('img');
     img.src = imageUrl;
-    img.alt = '';
-    img.decoding = 'async';
-    img.loading = 'lazy';
-    img.setAttribute('contenteditable', 'false');
-    img.draggable = false;
-
-    // shimmer off when image is ready
-    img.addEventListener('load', () => {
-        box.classList.remove('is-loading');
+    img.style.maxWidth = '100%';
+    img.style.height = 'auto';
+    img.style.borderRadius = '8px';
+    img.style.margin = '0.5rem 0';
+    img.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+    img.style.cursor = 'pointer';
+    
+    // Add click to zoom functionality
+    img.addEventListener('click', () => {
+        openImageModal(imageUrl);
     });
 
-    box.appendChild(img);
-
-    // helper: place caret after a given node
-    const moveCaretAfter = (node) => {
-        const range = document.createRange();
-        const sel = window.getSelection();
-        range.setStartAfter(node);
-        range.collapse(true);
-        sel.removeAllRanges();
-        sel.addRange(range);
-    };
-
-    // insert at current caret (or at end), then add a line break so typing continues on next line
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount) {
-        const r = sel.getRangeAt(0);
-        r.deleteContents();
-        r.insertNode(box);
+    // Insert at cursor position or at the end
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        range.insertNode(img);
+        range.collapse(false);
     } else {
-        noteElement.appendChild(box);
+        noteElement.appendChild(img);
     }
-    const br = document.createElement('br');
-    box.after(br);
-    moveCaretAfter(br);
 
-    // save right away
+    // Save the note with the image
     const noteId = noteElement.closest('.note').dataset.id;
-    updateNoteInFirebase(noteId, noteElement.innerHTML);
+    const noteContent = noteElement.innerHTML;
+    debouncedSave(noteId, noteContent, 500);
+};
 
-    // keep focus in the note
-    noteElement.focus();
+/* ---------- Image Modal for Full View ---------- */
+const openImageModal = (imageUrl) => {
+    // Create modal overlay
+    const modal = document.createElement('div');
+    modal.className = 'image-modal';
+    modal.innerHTML = `
+        <div class="modal-overlay">
+            <div class="modal-content">
+                <img src="${imageUrl}" alt="Screenshot">
+                <button class="modal-close">&times;</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Close modal on click
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal || e.target.classList.contains('modal-close')) {
+            document.body.removeChild(modal);
+        }
+    });
 };
