@@ -145,7 +145,7 @@ const startListener = (uid) => {
 };
 
 /* ---------- Debounced save ---------- */
-const debouncedSave = (id, text, delay = 800) => {
+const debouncedSave = (id, text, delay = 1500) => {
     if (saveTimers.has(id)) clearTimeout(saveTimers.get(id));
     const t = setTimeout(() => {
         updateNoteInFirebase(id, text);
@@ -391,3 +391,22 @@ const insertImageIntoNote = (noteElement, imageUrl) => {
     // keep focus in the note
     noteElement.focus();
 };
+
+
+
+// scrolling js
+/* ---------- Auto-hide Scrollbar ---------- */
+/* ---------- Simple Scrollbar Toggle ---------- */
+let scrollTimer;
+
+const show = () => {
+    document.documentElement.classList.add('show-scrollbar');
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(() => {
+        document.documentElement.classList.remove('show-scrollbar');
+    }, 700);
+};
+
+window.addEventListener('scroll', show, { passive: true });
+window.addEventListener('wheel', show, { passive: true });     // better on Windows
+document.addEventListener('keydown', show);   

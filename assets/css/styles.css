@@ -254,7 +254,7 @@ button {
 }
 
 /* ---------- Scrollbar ---------- */
-::-webkit-scrollbar {
+/* ::-webkit-scrollbar {
   width: 8px;
 }
 
@@ -274,7 +274,7 @@ button {
 * {
   scrollbar-width: thin;
   scrollbar-color: rgba(0, 0, 0, 0.3) transparent;
-}
+} */
 
 /* ---------- Image Handling ---------- */
 .input__box img {
@@ -437,4 +437,44 @@ button {
   border-radius: 4px;
   font-size: 0.8rem;
   animation: fadeInOut 2s ease-in-out;
+}
+
+
+/* scroll bar */
+
+html {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  background: transparent;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.3);
+  border-radius: 0px;
+
+  opacity: 0;
+  transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity;
+}
+
+html.show-scrollbar::-webkit-scrollbar-thumb {
+  opacity: 1;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.5);
+  opacity: 1;
+}
+
+html.show-scrollbar {
+  scrollbar-color: rgba(0, 0, 0, 0.3) transparent;
 }
