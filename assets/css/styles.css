@@ -449,7 +449,7 @@ html {
 }
 
 ::-webkit-scrollbar {
-  width: 10px;
+  width: 8px;
   background: transparent;
 }
 
@@ -477,4 +477,83 @@ html.show-scrollbar::-webkit-scrollbar-thumb {
 
 html.show-scrollbar {
   scrollbar-color: rgba(0, 0, 0, 0.3) transparent;
+}
+
+
+
+
+/* delete button on the images */
+
+/* Image container with delete button */
+.note-media {
+  position: relative;
+}
+
+.note-media .image-overlay {
+  position: absolute;
+  top: -14px;
+  right: -6px;
+  padding: 0.5rem;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.note-media:hover .image-overlay {
+  opacity: 1;
+}
+
+.note-media .delete-image {
+  padding: 1rem;
+  background: #b91c1c;
+  color: white;
+  border-radius: 50%;
+  font-size: 1rem;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+
+/*  */
+
+/* Mobile-specific focus improvements */
+.input__box {
+  /* Prevent iOS zoom on focus */
+  font-size: 16px !important;
+
+  /* Better mobile selection */
+  -webkit-user-select: text;
+  user-select: text;
+
+  /* Prevent touch interference */
+  touch-action: manipulation;
+
+  /* Force focus styles */
+  outline: none;
+}
+
+/* Ensure proper focus behavior on mobile */
+@media (max-width: 768px) {
+  .input__box {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
+}
+
+
+.input__box {
+  spellcheck: false;
+  /* not valid CSS, works only in HTML */
+}
+
+.input__box[spellcheck="false"] {
+  -moz-spellcheck: false;
+}
+
+.input__box {
+  -webkit-user-modify: read-write-plaintext-only;
+  /* for Chrome-based */
 }

@@ -6,7 +6,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 import {
     getFirestore,
-    collection, addDoc, setDoc, doc, updateDoc, deleteDoc,
+    collection, addDoc, doc, updateDoc, deleteDoc,
     query, where, orderBy, onSnapshot, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
@@ -34,18 +34,20 @@ const signOutBtn = document.getElementById("signoutBtn");
 
 /* ---------- State ---------- */
 let unsubscribe = null;
-let focusAfterCreateId = null;            // focus new note only when requested (button)
+let pendingFocusId = null;
+let focusAfterCreateId = null;
 const saveTimers = new Map();
 
+
 /* ---------- Mobile Cursor Fix Variables ---------- */
+let savedSelectionRange = null;
 let cursorPositions = new Map(); // Store cursor positions per note
 
 /* ---------- UI helpers ---------- */
-const makeCard = ({ id, text, order }) => {
+const makeCard = ({ id, text }) => {
     const card = document.createElement("div");
     card.className = "note";
     card.dataset.id = id;
-    if (order != null) card.dataset.order = String(order);
 
     const del = document.createElement("i");
     del.className = "ri-delete-bin-line";
@@ -53,29 +55,12 @@ const makeCard = ({ id, text, order }) => {
 
     const p = document.createElement("p");
     p.className = "input__box";
-    p.setAttribute("contenteditable", "true");
-
-    // ✅ turn off spell/auto-correct everywhere
-    p.spellcheck = false;                    // boolean (not string)
-    p.setAttribute("spellcheck", "false");   // some engines/extensions look at attr
-    p.setAttribute("autocorrect", "off");
-    p.setAttribute("autocapitalize", "off");
-    p.setAttribute("autocomplete", "off");
-    p.setAttribute("data-gramm", "false");   // Grammarly
-    p.setAttribute("data-lt-active", "false"); // LanguageTool
-
-    p.innerHTML = text || "";
+    p.contentEditable = "true";
+    p.spellcheck = "false";
+    p.innerHTML = text || ""; // Changed from textContent to innerHTML
 
     card.append(del, p);
     return card;
-};
-
-const insertCardByOrderDesc = (card) => {
-    const newOrder = Number(card.dataset.order || "0");
-    const children = Array.from(notesContainer.children).filter(el => el.classList.contains("note"));
-    const target = children.find(child => Number(child.dataset.order || "0") < newOrder);
-    if (target) notesContainer.insertBefore(card, target);
-    else notesContainer.appendChild(card);
 };
 
 const focusInputBox = (el) => {
@@ -89,7 +74,8 @@ const focusInputBox = (el) => {
     s.addRange(r);
 };
 
-/* ---------- Cursor save/restore ---------- */
+/* ---------- Mobile Cursor Fix Functions ---------- */
+// Function to save current cursor position
 function saveSelection(element) {
     const sel = window.getSelection();
     if (sel.rangeCount > 0) {
@@ -97,6 +83,7 @@ function saveSelection(element) {
         if (element.contains(range.startContainer) || element.contains(range.endContainer)) {
             const noteId = element.closest('.note').dataset.id;
             cursorPositions.set(noteId, {
+                range: range.cloneRange(),
                 startOffset: range.startOffset,
                 endOffset: range.endOffset,
                 startContainer: range.startContainer
@@ -105,29 +92,38 @@ function saveSelection(element) {
     }
 }
 
+// Function to restore cursor position
 function restoreSelection(element) {
     const noteId = element.closest('.note').dataset.id;
-    const saved = cursorPositions.get(noteId);
-    if (!saved) return;
-    try {
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        const range = document.createRange();
-        if (element.contains(saved.startContainer)) {
-            range.setStart(saved.startContainer, saved.startOffset);
-            range.setEnd(saved.startContainer, saved.endOffset);
-        } else {
+    const savedPosition = cursorPositions.get(noteId);
+
+    if (savedPosition) {
+        try {
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+
+            // Check if the saved container is still valid
+            if (element.contains(savedPosition.startContainer)) {
+                const range = document.createRange();
+                range.setStart(savedPosition.startContainer, savedPosition.startOffset);
+                range.setEnd(savedPosition.startContainer, savedPosition.endOffset);
+                sel.addRange(range);
+            } else {
+                // Fallback: place cursor at the end
+                const range = document.createRange();
+                range.selectNodeContents(element);
+                range.collapse(false);
+                sel.addRange(range);
+            }
+        } catch (error) {
+            // Fallback: place cursor at the end
+            const range = document.createRange();
+            const sel = window.getSelection();
             range.selectNodeContents(element);
             range.collapse(false);
+            sel.removeAllRanges();
+            sel.addRange(range);
         }
-        sel.addRange(range);
-    } catch {
-        const sel = window.getSelection();
-        const range = document.createRange();
-        range.selectNodeContents(element);
-        range.collapse(false);
-        sel.removeAllRanges();
-        sel.addRange(range);
     }
 }
 
@@ -147,23 +143,24 @@ const updateNoteInFirebase = (id, text) =>
 const deleteNoteFromFirebase = (id) =>
     deleteDoc(doc(db, "notes", id));
 
-/* ---------- Real-time listener (incremental, no full rebuilds) ---------- */
+/* ---------- Real-time listener ---------- */
 const startListener = (uid) => {
     if (unsubscribe) unsubscribe();
 
     const loadingSection = document.querySelector('.loading-section');
     const controlsSection = document.querySelector('.controls-section');
 
+    // Step 1: Hide main loader and show controls
     if (loadingSection) loadingSection.style.display = 'none';
     if (controlsSection) controlsSection.style.display = 'flex';
 
-    // show loader once (will be removed on first snapshot)
+    // Step 2: Clear container and show notes loader
     notesContainer.innerHTML = `
-    <div class="notes-loader">
-      <i class="ri-loader-4-line"></i>
-      <p>Summoning your notes...</p>
-    </div>
-  `;
+        <div class="notes-loader">
+            <i class="ri-loader-4-line"></i>
+            <p>Summoning your notes...</p>
+        </div>
+    `;
 
     const qNotes = query(
         collection(db, "notes"),
@@ -171,96 +168,36 @@ const startListener = (uid) => {
         orderBy("order", "desc")
     );
 
-    unsubscribe = onSnapshot(qNotes, { includeMetadataChanges: true }, (snap) => {
-        // remove loader when data arrives
-        const loader = notesContainer.querySelector('.notes-loader');
-        if (loader) loader.remove();
-
-        // remember caret in currently focused note
-        const activeBox =
-            document.activeElement?.classList?.contains('input__box') ? document.activeElement : null;
-        const activeId = activeBox ? activeBox.closest('.note')?.dataset.id : null;
-        if (activeBox) saveSelection(activeBox);
-
-        // apply only changes
-        snap.docChanges().forEach(change => {
-            const id = change.doc.id;
-            const data = change.doc.data() || {};
-            const orderVal = data.order ?? 0;
-
-            if (change.type === 'added') {
-                if (!notesContainer.querySelector(`.note[data-id="${id}"]`)) {
-                    const card = makeCard({ id, text: data.text || "", order: orderVal });
-                    insertCardByOrderDesc(card); // assumes this helper exists
-                }
-            }
-
-            if (change.type === 'modified') {
-                const node = notesContainer.querySelector(`.note[data-id="${id}"]`);
-                if (node) {
-                    // move if order changed
-                    if (String(node.dataset.order || "") !== String(orderVal)) {
-                        node.dataset.order = String(orderVal);
-                        insertCardByOrderDesc(node);
-                    }
-                    // update content if different (preserve caret if focused)
-                    const box = node.querySelector('.input__box');
-                    const newHTML = data.text || "";
-                    if (box && box.innerHTML !== newHTML) {
-                        const wasFocused = document.activeElement === box;
-                        if (wasFocused) saveSelection(box);
-                        box.innerHTML = newHTML;
-                        if (wasFocused) restoreSelection(box);
-                    }
-                }
-            }
-
-            if (change.type === 'removed') {
-                notesContainer.querySelector(`.note[data-id="${id}"]`)?.remove();
-            }
-        });
-
-        // ---------- Focus behavior ----------
-        // If we created a note (e.g., via Ctrl+D), keep focusing it across both snapshots
-        if (focusAfterCreateId) {
-            const box = notesContainer.querySelector(`.note[data-id="${focusAfterCreateId}"] .input__box`);
-            if (box) {
-                requestAnimationFrame(() => { focusInputBox(box); });
-                // Only clear once the write is fully acknowledged by the server
-                if (!snap.metadata.hasPendingWrites) {
-                    focusAfterCreateId = null;
-                }
-            }
-            // If the new note hasn't appeared yet, do nothing and try again on next snapshot
-        } else if (activeId) {
-            // Otherwise keep the user’s caret where it was
-            const box = notesContainer.querySelector(`.note[data-id="${activeId}"] .input__box`);
-            if (box && document.activeElement !== box) {
-                try { restoreSelection(box); } catch { focusInputBox(box); }
-            }
+    let firstRun = true;
+    unsubscribe = onSnapshot(qNotes, (snap) => {
+        // Step 3: Clear loader and show notes
+        if (firstRun) {
+            notesContainer.innerHTML = ''; // Clear the loader
+            firstRun = false;
+        } else {
+            notesContainer.innerHTML = ''; // Clear existing notes
         }
 
-        // empty state if no notes
-        if (snap.size === 0 && !notesContainer.querySelector('.empty-state')) {
-            const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
-            const modKey = isMac ? '⌘' : 'Ctrl';
+        // Step 4: Add all notes
+        snap.forEach(d => {
+            notesContainer.appendChild(
+                makeCard({ id: d.id, text: d.data().text || "" })
+            );
+        });
 
-            notesContainer.innerHTML = `
-    <div class="empty-state">
-      No notes yet. Click "Create" or press ${modKey}+D.
-      <div style="opacity:.75;margin-top:.25rem;">Tip: ${modKey}+Q to remove the most recent note.</div>
-    </div>
-  `;
-        } else if (snap.size > 0) {
-            const empty = notesContainer.querySelector('.empty-state');
-            if (empty) empty.remove();
+        // Focus logic
+        if (pendingFocusId) {
+            const box = notesContainer.querySelector(
+                `.note[data-id="${pendingFocusId}"] .input__box`
+            );
+            if (box) focusInputBox(box);
+            pendingFocusId = null;
         }
     }, (err) => {
         console.error("onSnapshot error:", err);
         notesContainer.innerHTML = '<p class="error-message">Error loading notes</p>';
     });
 };
-
 
 /* ---------- Debounced save ---------- */
 const debouncedSave = (id, text, delay = 1500) => {
@@ -299,46 +236,10 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /* ---------- UI events ---------- */
-// create with option: button focuses new, Ctrl+D keeps current caret
-const addNote = () => {
+const addNote = async () => {
     const user = auth.currentUser;
     if (!user) return;
-
-    // 1) Instantly remove caret from the current note
-    const activeBox = document.activeElement?.classList?.contains('input__box')
-        ? document.activeElement
-        : null;
-    if (activeBox) activeBox.blur();
-
-    // 2) Generate an ID *now* (no network wait)
-    const ref = doc(collection(db, "notes"));
-    const id = ref.id;
-    const order = Date.now();
-    const payload = {
-        userId: user.uid,
-        text: "",
-        order,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-    };
-
-    // 3) Optimistically add the card to the DOM and focus it
-    if (!notesContainer.querySelector(`.note[data-id="${id}"]`)) {
-        const card = makeCard({ id, text: "", order });
-        // uses your existing helper
-        insertCardByOrderDesc(card);
-        const box = card.querySelector('.input__box');
-        requestAnimationFrame(() => {
-            focusInputBox(box);                  // caret jumps to new note immediately
-            box.scrollIntoView({ block: 'nearest' });
-        });
-    }
-
-    // 4) Keep focusing this note across local+server snapshots until ack
-    focusAfterCreateId = id;
-
-    // 5) Write to Firestore (no await needed)
-    setDoc(ref, payload).catch(console.error);
+    pendingFocusId = await addNoteToFirebase(user.uid);
 };
 
 const deleteNewestNote = async () => {
@@ -346,17 +247,23 @@ const deleteNewestNote = async () => {
     if (first) await deleteNoteFromFirebase(first.dataset.id);
 };
 
-createBtn.addEventListener("click", () => addNote({ focusNew: true }));
+createBtn.addEventListener("click", addNote);
 
 notesContainer.addEventListener("click", async (e) => {
     if (e.target.id !== "deleteNote") return;
     await deleteNoteFromFirebase(e.target.closest(".note").dataset.id);
 });
 
-// input: save caret + debounce save (no forced focus -> prevents flicker)
+// Enhanced input event listener with cursor saving
 notesContainer.addEventListener("input", (e) => {
     if (!e.target.classList.contains("input__box")) return;
+
+    // Save cursor position
     saveSelection(e.target);
+
+    // ADD THIS LINE:
+    e.target.focus(); // Ensure focus stays during typing
+
     debouncedSave(
         e.target.closest(".note").dataset.id,
         e.target.innerHTML
@@ -374,11 +281,15 @@ notesContainer.addEventListener("blur", (e) => {
     updateNoteInFirebase(id, content);
 }, true);
 
-// focus management
+// Enhanced focus management
 notesContainer.addEventListener('focusin', (e) => {
     if (!e.target.classList.contains('input__box')) return;
+
+    // Small delay to ensure proper focus
     setTimeout(() => {
-        if (document.activeElement === e.target) restoreSelection(e.target);
+        if (document.activeElement === e.target) {
+            restoreSelection(e.target);
+        }
     }, 10);
 });
 
@@ -398,23 +309,30 @@ notesContainer.addEventListener('click', (e) => {
 
     if (editor && figure) {
         figure.remove();
+
+        // also remove a trailing <br> we inserted after the image (optional cleanup)
         const next = editor.childNodes[Array.prototype.indexOf.call(editor.childNodes, figure) + 1];
         if (next && next.nodeName === 'BR') next.remove();
+
+        // save after deletion
         const noteId = note.dataset.id;
         updateNoteInFirebase(noteId, editor.innerHTML);
     }
 });
 
 /* ---------- Mobile Touch Events ---------- */
+// Prevent blur on mobile touch events (aggressive focus retention)
 notesContainer.addEventListener('touchstart', (e) => {
     if (e.target.classList.contains('input__box')) {
         e.target.focus();
     }
 });
 
+// Mobile-specific: Prevent focus loss on virtual keyboard actions
 document.addEventListener('touchend', (e) => {
     const activeElement = document.activeElement;
     if (activeElement && activeElement.classList.contains('input__box')) {
+        // Re-focus if focus was lost
         setTimeout(() => {
             if (document.activeElement !== activeElement) {
                 activeElement.focus();
@@ -429,12 +347,17 @@ let initialViewportHeight = window.innerHeight;
 window.addEventListener('resize', () => {
     const currentHeight = window.innerHeight;
     const heightDifference = initialViewportHeight - currentHeight;
+
+    // If height reduced significantly (keyboard opened)
     if (heightDifference > 150) {
         const activeElement = document.activeElement;
         if (activeElement && activeElement.classList.contains('input__box')) {
+            // Ensure element stays in view
             activeElement.scrollIntoView({ block: 'center', behavior: 'smooth' });
         }
     }
+
+    // Update initial height when keyboard closes
     if (Math.abs(heightDifference) < 50) {
         initialViewportHeight = currentHeight;
     }
@@ -445,7 +368,7 @@ document.addEventListener("keydown", (e) => {
     const accel = e.ctrlKey || e.metaKey;
     if (accel && e.key.toLowerCase() === "d") {
         e.preventDefault();
-        addNote(); // this now sets focusAfterCreateId
+        addNote();
     }
     if (accel && e.key.toLowerCase() === "q") {
         e.preventDefault();
@@ -477,13 +400,17 @@ onAuthStateChanged(auth, (user) => {
     const controlsSection = document.querySelector('.controls-section');
 
     if (user) {
+        // User is authenticated
         authSection.style.display = "none";
-        controlsSection.style.display = "none"; // keep hidden until notes load
+        controlsSection.style.display = "none"; // Keep hidden until notes load
+
+        // Start listening to user's notes
         startListener(user.uid);
     } else {
-        if (loadingSection) loadingSection.style.display = "none";
-        if (authSection) authSection.style.display = "block";
-        if (controlsSection) controlsSection.style.display = "none";
+        // User is not authenticated - show sign-in
+        loadingSection.style.display = "none";
+        authSection.style.display = "block";
+        controlsSection.style.display = "none";
         notesContainer.innerHTML = "";
     }
 });
@@ -503,9 +430,11 @@ const handleImagePaste = async (file) => {
 };
 
 const insertImageIntoNote = (noteElement, imageUrl) => {
+    // figure container that matches your CSS
     const box = document.createElement('figure');
     box.className = 'note-media is-loading';
 
+    // image
     const img = document.createElement('img');
     img.src = imageUrl;
     img.alt = '';
@@ -514,6 +443,7 @@ const insertImageIntoNote = (noteElement, imageUrl) => {
     img.setAttribute('contenteditable', 'false');
     img.draggable = false;
 
+    // overlay delete button
     const overlay = document.createElement('div');
     overlay.className = 'image-overlay';
     overlay.setAttribute('contenteditable', 'false');
@@ -525,11 +455,16 @@ const insertImageIntoNote = (noteElement, imageUrl) => {
     delBtn.title = 'Delete image';
     overlay.appendChild(delBtn);
 
-    img.addEventListener('load', () => { box.classList.remove('is-loading'); });
+    // shimmer off when image is ready
+    img.addEventListener('load', () => {
+        box.classList.remove('is-loading');
+    });
 
+    // assemble
     box.appendChild(img);
     box.appendChild(overlay);
 
+    // helper: place caret after a given node
     const moveCaretAfter = (node) => {
         const range = document.createRange();
         const sel = window.getSelection();
@@ -539,6 +474,7 @@ const insertImageIntoNote = (noteElement, imageUrl) => {
         sel.addRange(range);
     };
 
+    // insert at current caret (or at end), then add a line break so typing continues on next line
     const sel = window.getSelection();
     if (sel && sel.rangeCount) {
         const r = sel.getRangeAt(0);
@@ -552,9 +488,11 @@ const insertImageIntoNote = (noteElement, imageUrl) => {
     box.after(br);
     moveCaretAfter(br);
 
+    // save right away
     const noteId = noteElement.closest('.note').dataset.id;
     updateNoteInFirebase(noteId, noteElement.innerHTML);
 
+    // keep focus in the note
     noteElement.focus();
 };
 
@@ -563,11 +501,13 @@ document.addEventListener('paste', async (e) => {
     const activeElement = document.activeElement;
     if (!activeElement || !activeElement.classList.contains('input__box')) return;
 
+    // Save cursor position before paste
     saveSelection(activeElement);
 
     const items = e.clipboardData.items;
     let hasImage = false;
 
+    // Check for images
     for (let item of items) {
         if (item.type.indexOf('image') !== -1) {
             hasImage = true;
@@ -576,8 +516,11 @@ document.addEventListener('paste', async (e) => {
             const file = item.getAsFile();
             const imageUrl = await handleImagePaste(file);
 
-            if (imageUrl) insertImageIntoNote(activeElement, imageUrl);
+            if (imageUrl) {
+                insertImageIntoNote(activeElement, imageUrl);
+            }
 
+            // Ensure focus stays
             setTimeout(() => {
                 activeElement.focus();
                 saveSelection(activeElement);
@@ -586,6 +529,7 @@ document.addEventListener('paste', async (e) => {
         }
     }
 
+    // Handle text paste
     if (!hasImage) {
         e.preventDefault();
         const text = e.clipboardData.getData('text/plain');
@@ -602,16 +546,21 @@ document.addEventListener('paste', async (e) => {
             selection.addRange(range);
         }
 
+        // Save and trigger update
         const noteId = activeElement.closest('.note').dataset.id;
         saveSelection(activeElement);
         debouncedSave(noteId, activeElement.innerHTML);
 
-        setTimeout(() => { activeElement.focus(); }, 50);
+        // Ensure focus stays
+        setTimeout(() => {
+            activeElement.focus();
+        }, 50);
     }
 });
 
 /* ---------- Auto-hide Scrollbar ---------- */
 let scrollTimer;
+
 const show = () => {
     document.documentElement.classList.add('show-scrollbar');
     clearTimeout(scrollTimer);
@@ -619,6 +568,9 @@ const show = () => {
         document.documentElement.classList.remove('show-scrollbar');
     }, 700);
 };
+
 window.addEventListener('scroll', show, { passive: true });
 window.addEventListener('wheel', show, { passive: true });
 document.addEventListener('keydown', show);
+
+
