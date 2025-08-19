@@ -247,8 +247,8 @@ const startListener = (uid) => {
 
             notesContainer.innerHTML = `
     <div class="empty-state">
-      No notes yet. Click "Create" or press ${modKey}+D.
-      <div style="opacity:.75;margin-top:.25rem;">Tip: ${modKey}+Q to remove the most recent note.</div>
+      No notes yet. Click "Create" or press "${modKey}+D".
+      <div style="opacity:.75;margin-top:.25rem;">Tip: "${modKey}+Q" to remove the most recent note.</div>
     </div>
   `;
         } else if (snap.size > 0) {
